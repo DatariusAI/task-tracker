@@ -7,23 +7,37 @@ const client = new Anthropic({
   apiKey: process.env.ANTHROPIC_API_KEY,
 });
 
+const sessions = {};
+
 router.get('/', homeController.getHome);
 
 router.post('/chat', async (req, res) => {
-  const { message } = req.body;
+  const { message, sessionId } = req.body;
 
   if (!message) {
     return res.status(400).json({ error: 'Message is required' });
   }
 
+  const id = sessionId || 'default';
+
+  if (!sessions[id]) {
+    sessions[id] = [];
+  }
+
+  sessions[id].push({ role: 'user', content: message });
+
   try {
     const response = await client.messages.create({
       model: 'claude-sonnet-4-5',
       max_tokens: 1024,
-      messages: [{ role: 'user', content: message }],
+      messages: sessions[id],
     });
 
-    res.json({ reply: response.content[0].text });
+    const reply = response.content[0].text;
+
+    sessions[id].push({ role: 'assistant', content: reply });
+
+    res.json({ reply, sessionId: id });
   } catch (err) {
     console.error('Claude API error:', err);
     res.status(500).json({ error: 'Claude API call failed' });
