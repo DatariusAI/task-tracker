@@ -9,9 +9,9 @@
   body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; background: #f0f2f5; padding: 20px; }
   h1 { text-align: center; margin-bottom: 20px; color: #1a1a2e; }
   .controls { display: flex; gap: 10px; justify-content: center; margin-bottom: 20px; flex-wrap: wrap; }
-  .controls select, .controls button { padding: 8px 16px; border-radius: 6px; border: 1px solid #ccc; font-size: 14px; }
+  .controls select, .controls button, .controls label { padding: 8px 16px; border-radius: 6px; border: 1px solid #ccc; font-size: 14px; }
   .controls button { background: #4361ee; color: white; border: none; cursor: pointer; }
-  .controls button:hover { background: #3a56d4; }
+  .controls label { display: flex; align-items: center; gap: 6px; cursor: pointer; background: white; }
   .board { display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; max-width: 1200px; margin: 0 auto; }
   .column { background: #e8eaed; border-radius: 10px; padding: 12px; min-height: 400px; }
   .column h2 { text-align: center; font-size: 16px; padding: 8px; margin-bottom: 10px; border-radius: 6px; color: white; }
@@ -25,9 +25,12 @@
   .priority-High { border-left: 4px solid #dc3545; }
   .priority-Medium { border-left: 4px solid #f0ad4e; }
   .priority-Low { border-left: 4px solid #5cb85c; }
+  .overdue-pill { display: inline-block; background: #dc3545; color: white; font-size: 11px; padding: 2px 8px; border-radius: 10px; margin-top: 4px; }
+  .due-pill { display: inline-block; background: #6c757d; color: white; font-size: 11px; padding: 2px 8px; border-radius: 10px; margin-top: 4px; }
+  .comment-count { display: inline-block; font-size: 11px; color: #4361ee; margin-top: 4px; }
   .modal-overlay { display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.5); z-index: 100; justify-content: center; align-items: center; }
   .modal-overlay.active { display: flex; }
-  .modal { background: white; border-radius: 12px; padding: 24px; width: 90%; max-width: 500px; }
+  .modal { background: white; border-radius: 12px; padding: 24px; width: 90%; max-width: 500px; max-height: 90vh; overflow-y: auto; }
   .modal h2 { margin-bottom: 16px; }
   .modal label { display: block; margin-bottom: 4px; font-weight: 600; font-size: 14px; }
   .modal input, .modal select, .modal textarea { width: 100%; padding: 8px; margin-bottom: 12px; border: 1px solid #ccc; border-radius: 6px; font-size: 14px; }
@@ -38,12 +41,20 @@
   .btn-cancel { background: #e8eaed; }
   .btn-delete { background: #dc3545; color: white; }
   .empty { text-align: center; color: #999; font-size: 13px; padding: 20px; }
+  .comments-section { border-top: 1px solid #eee; margin-top: 16px; padding-top: 12px; }
+  .comments-section h3 { font-size: 14px; margin-bottom: 8px; }
+  .comment-item { background: #f8f9fa; padding: 8px; border-radius: 6px; margin-bottom: 6px; font-size: 13px; display: flex; justify-content: space-between; align-items: start; }
+  .comment-item .del-comment { background: none; border: none; color: #dc3545; cursor: pointer; font-size: 16px; padding: 0 4px; }
+  .comment-input { display: flex; gap: 8px; }
+  .comment-input input { flex: 1; margin-bottom: 0; }
+  .comment-input button { padding: 8px 16px; background: #4361ee; color: white; border: none; border-radius: 6px; cursor: pointer; white-space: nowrap; }
 </style>
 </head>
 <body>
 <h1>Task Tracker</h1>
 <div class="controls">
   <select id="filterPriority"><option value="">All Priorities</option><option>High</option><option>Medium</option><option>Low</option></select>
+  <label><input type="checkbox" id="filterOverdue"> Overdue Only</label>
   <button onclick="openModal()">+ New Task</button>
 </div>
 <div class="board">
@@ -64,9 +75,19 @@
     <select id="taskPriority"><option>Low</option><option selected>Medium</option><option>High</option></select>
     <label>Assignee</label>
     <input type="text" id="taskAssignee" placeholder="Optional assignee">
+    <label>Due Date</label>
+    <input type="date" id="taskDueDate">
     <div id="statusGroup" style="display:none;">
       <label>Status</label>
       <select id="taskStatus"><option>ToDo</option><option>InProgress</option><option>Done</option></select>
+    </div>
+    <div id="commentsSection" class="comments-section" style="display:none;">
+      <h3>Comments</h3>
+      <div id="commentsList"></div>
+      <div class="comment-input">
+        <input type="text" id="commentInput" placeholder="Add a comment...">
+        <button onclick="addComment()">Post</button>
+      </div>
     </div>
     <div class="modal-actions">
       <button class="btn-delete" id="btnDelete" style="display:none;" onclick="deleteTask()">Delete</button>
@@ -78,23 +99,43 @@
 
 <script>
 const API = "http://127.0.0.1:8000";
+let commentCounts = {};
 
 async function loadTasks() {
   let url = API + "/tasks";
+  const params = [];
   const priority = document.getElementById("filterPriority").value;
-  if (priority) url += "?priority=" + priority;
+  const overdue = document.getElementById("filterOverdue").checked;
+  if (priority) params.push("priority=" + priority);
+  if (overdue) params.push("overdue=true");
+  if (params.length) url += "?" + params.join("&");
   const res = await fetch(url);
   const tasks = await res.json();
+  for (const t of tasks) { commentCounts[t.id] = await getCommentCount(t.id); }
   ["ToDo","InProgress","Done"].forEach(s => {
     const col = document.getElementById("col-" + s);
     const filtered = tasks.filter(t => t.status === s);
-    col.innerHTML = filtered.length ? filtered.map(t =>
-      '<div class="card priority-' + t.priority + '" onclick="openModal(\'' + t.id + '\')">' +
-      '<h3>' + t.title + '</h3>' +
-      '<div class="meta">' + t.priority + (t.assignee ? ' &middot; ' + t.assignee : '') + '</div>' +
-      '</div>'
-    ).join("") : '<div class="empty">No tasks</div>';
+    col.innerHTML = filtered.length ? filtered.map(t => {
+      const today = new Date().toISOString().split("T")[0];
+      const isOverdue = t.due_date && t.due_date < today && t.status !== "Done";
+      let pills = "";
+      if (isOverdue) pills += '<span class="overdue-pill">OVERDUE</span> ';
+      else if (t.due_date) pills += '<span class="due-pill">Due: ' + t.due_date + '</span> ';
+      const cc = commentCounts[t.id] || 0;
+      if (cc > 0) pills += '<span class="comment-count">' + cc + ' comment' + (cc > 1 ? 's' : '') + '</span>';
+      return '<div class="card priority-' + t.priority + '" onclick="openModal(\'' + t.id + '\')">' +
+        '<h3>' + t.title + '</h3>' +
+        '<div class="meta">' + t.priority + (t.assignee ? ' &middot; ' + t.assignee : '') + '</div>' +
+        (pills ? '<div>' + pills + '</div>' : '') +
+        '</div>';
+    }).join("") : '<div class="empty">No tasks</div>';
   });
+}
+
+async function getCommentCount(taskId) {
+  const r = await fetch(API + "/tasks/" + taskId + "/comments");
+  const c = await r.json();
+  return c.length;
 }
 
 function openModal(id) {
@@ -107,9 +148,12 @@ function openModal(id) {
       document.getElementById("taskDesc").value = t.description || "";
       document.getElementById("taskPriority").value = t.priority;
       document.getElementById("taskAssignee").value = t.assignee || "";
+      document.getElementById("taskDueDate").value = t.due_date || "";
       document.getElementById("taskStatus").value = t.status;
       document.getElementById("statusGroup").style.display = "block";
       document.getElementById("btnDelete").style.display = "inline-block";
+      document.getElementById("commentsSection").style.display = "block";
+      loadComments(t.id);
     });
   } else {
     document.getElementById("modalTitle").textContent = "New Task";
@@ -118,8 +162,10 @@ function openModal(id) {
     document.getElementById("taskDesc").value = "";
     document.getElementById("taskPriority").value = "Medium";
     document.getElementById("taskAssignee").value = "";
+    document.getElementById("taskDueDate").value = "";
     document.getElementById("statusGroup").style.display = "none";
     document.getElementById("btnDelete").style.display = "none";
+    document.getElementById("commentsSection").style.display = "none";
   }
 }
 
@@ -132,6 +178,7 @@ async function saveTask() {
     description: document.getElementById("taskDesc").value || null,
     priority: document.getElementById("taskPriority").value,
     assignee: document.getElementById("taskAssignee").value || null,
+    due_date: document.getElementById("taskDueDate").value || null,
   };
   if (id) {
     body.status = document.getElementById("taskStatus").value;
@@ -152,7 +199,34 @@ async function deleteTask() {
   }
 }
 
+async function loadComments(taskId) {
+  const r = await fetch(API + "/tasks/" + taskId + "/comments");
+  const comments = await r.json();
+  const list = document.getElementById("commentsList");
+  list.innerHTML = comments.length ? comments.map(c =>
+    '<div class="comment-item"><span>' + c.text + '</span><button class="del-comment" onclick="deleteComment(\'' + taskId + '\',\'' + c.id + '\')">&times;</button></div>'
+  ).join("") : '<div class="empty">No comments yet</div>';
+}
+
+async function addComment() {
+  const taskId = document.getElementById("taskId").value;
+  const input = document.getElementById("commentInput");
+  if (!input.value.trim()) return;
+  await fetch(API + "/tasks/" + taskId + "/comments", {
+    method: "POST", headers: {"Content-Type":"application/json"},
+    body: JSON.stringify({ text: input.value })
+  });
+  input.value = "";
+  loadComments(taskId);
+}
+
+async function deleteComment(taskId, commentId) {
+  await fetch(API + "/tasks/" + taskId + "/comments/" + commentId, { method: "DELETE" });
+  loadComments(taskId);
+}
+
 document.getElementById("filterPriority").addEventListener("change", loadTasks);
+document.getElementById("filterOverdue").addEventListener("change", loadTasks);
 loadTasks();
 </script>
 </body>

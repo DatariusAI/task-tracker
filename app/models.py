@@ -1,7 +1,7 @@
 ﻿from pydantic import BaseModel, Field, field_validator
 from enum import Enum
 from typing import Optional
-from datetime import datetime
+from datetime import datetime, date
 import uuid
 
 class TaskStatus(str, Enum):
@@ -20,6 +20,7 @@ class TaskCreate(BaseModel):
     status: TaskStatus = TaskStatus.ToDo
     priority: TaskPriority = TaskPriority.Medium
     assignee: Optional[str] = None
+    due_date: Optional[date] = None
 
     @field_validator("title")
     @classmethod
@@ -34,6 +35,7 @@ class TaskUpdate(BaseModel):
     status: Optional[TaskStatus] = None
     priority: Optional[TaskPriority] = None
     assignee: Optional[str] = None
+    due_date: Optional[date] = None
 
     @field_validator("title")
     @classmethod
@@ -49,4 +51,21 @@ class TaskResponse(BaseModel):
     status: TaskStatus
     priority: TaskPriority
     assignee: Optional[str] = None
+    created_at: datetime
+    due_date: Optional[date] = None
+
+class CommentCreate(BaseModel):
+    text: str = Field(..., min_length=1)
+
+    @field_validator("text")
+    @classmethod
+    def text_not_blank(cls, v):
+        if not v.strip():
+            raise ValueError("Comment text cannot be blank")
+        return v.strip()
+
+class CommentResponse(BaseModel):
+    id: str
+    task_id: str
+    text: str
     created_at: datetime
