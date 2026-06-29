@@ -1,10 +1,8 @@
 require('dotenv').config();
-const express = require('express');
-const app = express();
+const app = require('./src/app');
 
-app.use(express.json());
-app.use('/', require('./src/routes/index'));
+const PORT = process.env.PORT || 3000;
 
-app.listen(3000, () => {
-  console.log('DataariusAI server running on port 3000');
+app.listen(PORT, () => {
+  console.log(`DatariusAI server running on port ${PORT}`);
 });

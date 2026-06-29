@@ -1,0 +1,159 @@
+﻿<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Task Tracker</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; background: #f0f2f5; padding: 20px; }
+  h1 { text-align: center; margin-bottom: 20px; color: #1a1a2e; }
+  .controls { display: flex; gap: 10px; justify-content: center; margin-bottom: 20px; flex-wrap: wrap; }
+  .controls select, .controls button { padding: 8px 16px; border-radius: 6px; border: 1px solid #ccc; font-size: 14px; }
+  .controls button { background: #4361ee; color: white; border: none; cursor: pointer; }
+  .controls button:hover { background: #3a56d4; }
+  .board { display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; max-width: 1200px; margin: 0 auto; }
+  .column { background: #e8eaed; border-radius: 10px; padding: 12px; min-height: 400px; }
+  .column h2 { text-align: center; font-size: 16px; padding: 8px; margin-bottom: 10px; border-radius: 6px; color: white; }
+  .col-todo h2 { background: #6c757d; }
+  .col-inprogress h2 { background: #f0ad4e; }
+  .col-done h2 { background: #5cb85c; }
+  .card { background: white; border-radius: 8px; padding: 12px; margin-bottom: 10px; box-shadow: 0 1px 3px rgba(0,0,0,0.1); cursor: pointer; }
+  .card:hover { box-shadow: 0 2px 6px rgba(0,0,0,0.15); }
+  .card h3 { font-size: 14px; margin-bottom: 6px; }
+  .card .meta { font-size: 12px; color: #666; }
+  .priority-High { border-left: 4px solid #dc3545; }
+  .priority-Medium { border-left: 4px solid #f0ad4e; }
+  .priority-Low { border-left: 4px solid #5cb85c; }
+  .modal-overlay { display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.5); z-index: 100; justify-content: center; align-items: center; }
+  .modal-overlay.active { display: flex; }
+  .modal { background: white; border-radius: 12px; padding: 24px; width: 90%; max-width: 500px; }
+  .modal h2 { margin-bottom: 16px; }
+  .modal label { display: block; margin-bottom: 4px; font-weight: 600; font-size: 14px; }
+  .modal input, .modal select, .modal textarea { width: 100%; padding: 8px; margin-bottom: 12px; border: 1px solid #ccc; border-radius: 6px; font-size: 14px; }
+  .modal textarea { height: 80px; resize: vertical; }
+  .modal-actions { display: flex; gap: 10px; justify-content: flex-end; margin-top: 10px; }
+  .modal-actions button { padding: 8px 20px; border-radius: 6px; border: none; cursor: pointer; font-size: 14px; }
+  .btn-save { background: #4361ee; color: white; }
+  .btn-cancel { background: #e8eaed; }
+  .btn-delete { background: #dc3545; color: white; }
+  .empty { text-align: center; color: #999; font-size: 13px; padding: 20px; }
+</style>
+</head>
+<body>
+<h1>Task Tracker</h1>
+<div class="controls">
+  <select id="filterPriority"><option value="">All Priorities</option><option>High</option><option>Medium</option><option>Low</option></select>
+  <button onclick="openModal()">+ New Task</button>
+</div>
+<div class="board">
+  <div class="column col-todo"><h2>To Do</h2><div id="col-ToDo"></div></div>
+  <div class="column col-inprogress"><h2>In Progress</h2><div id="col-InProgress"></div></div>
+  <div class="column col-done"><h2>Done</h2><div id="col-Done"></div></div>
+</div>
+
+<div class="modal-overlay" id="modalOverlay">
+  <div class="modal">
+    <h2 id="modalTitle">New Task</h2>
+    <input type="hidden" id="taskId">
+    <label>Title *</label>
+    <input type="text" id="taskTitleInput" placeholder="Task title">
+    <label>Description</label>
+    <textarea id="taskDesc" placeholder="Optional description"></textarea>
+    <label>Priority</label>
+    <select id="taskPriority"><option>Low</option><option selected>Medium</option><option>High</option></select>
+    <label>Assignee</label>
+    <input type="text" id="taskAssignee" placeholder="Optional assignee">
+    <div id="statusGroup" style="display:none;">
+      <label>Status</label>
+      <select id="taskStatus"><option>ToDo</option><option>InProgress</option><option>Done</option></select>
+    </div>
+    <div class="modal-actions">
+      <button class="btn-delete" id="btnDelete" style="display:none;" onclick="deleteTask()">Delete</button>
+      <button class="btn-cancel" onclick="closeModal()">Cancel</button>
+      <button class="btn-save" onclick="saveTask()">Save</button>
+    </div>
+  </div>
+</div>
+
+<script>
+const API = "http://127.0.0.1:8000";
+
+async function loadTasks() {
+  let url = API + "/tasks";
+  const priority = document.getElementById("filterPriority").value;
+  if (priority) url += "?priority=" + priority;
+  const res = await fetch(url);
+  const tasks = await res.json();
+  ["ToDo","InProgress","Done"].forEach(s => {
+    const col = document.getElementById("col-" + s);
+    const filtered = tasks.filter(t => t.status === s);
+    col.innerHTML = filtered.length ? filtered.map(t =>
+      '<div class="card priority-' + t.priority + '" onclick="openModal(\'' + t.id + '\')">' +
+      '<h3>' + t.title + '</h3>' +
+      '<div class="meta">' + t.priority + (t.assignee ? ' &middot; ' + t.assignee : '') + '</div>' +
+      '</div>'
+    ).join("") : '<div class="empty">No tasks</div>';
+  });
+}
+
+function openModal(id) {
+  document.getElementById("modalOverlay").classList.add("active");
+  if (id) {
+    fetch(API + "/tasks/" + id).then(r => r.json()).then(t => {
+      document.getElementById("modalTitle").textContent = "Edit Task";
+      document.getElementById("taskId").value = t.id;
+      document.getElementById("taskTitleInput").value = t.title;
+      document.getElementById("taskDesc").value = t.description || "";
+      document.getElementById("taskPriority").value = t.priority;
+      document.getElementById("taskAssignee").value = t.assignee || "";
+      document.getElementById("taskStatus").value = t.status;
+      document.getElementById("statusGroup").style.display = "block";
+      document.getElementById("btnDelete").style.display = "inline-block";
+    });
+  } else {
+    document.getElementById("modalTitle").textContent = "New Task";
+    document.getElementById("taskId").value = "";
+    document.getElementById("taskTitleInput").value = "";
+    document.getElementById("taskDesc").value = "";
+    document.getElementById("taskPriority").value = "Medium";
+    document.getElementById("taskAssignee").value = "";
+    document.getElementById("statusGroup").style.display = "none";
+    document.getElementById("btnDelete").style.display = "none";
+  }
+}
+
+function closeModal() { document.getElementById("modalOverlay").classList.remove("active"); }
+
+async function saveTask() {
+  const id = document.getElementById("taskId").value;
+  const body = {
+    title: document.getElementById("taskTitleInput").value,
+    description: document.getElementById("taskDesc").value || null,
+    priority: document.getElementById("taskPriority").value,
+    assignee: document.getElementById("taskAssignee").value || null,
+  };
+  if (id) {
+    body.status = document.getElementById("taskStatus").value;
+    await fetch(API + "/tasks/" + id, { method: "PATCH", headers: {"Content-Type":"application/json"}, body: JSON.stringify(body) });
+  } else {
+    await fetch(API + "/tasks", { method: "POST", headers: {"Content-Type":"application/json"}, body: JSON.stringify(body) });
+  }
+  closeModal();
+  loadTasks();
+}
+
+async function deleteTask() {
+  const id = document.getElementById("taskId").value;
+  if (id && confirm("Delete this task?")) {
+    await fetch(API + "/tasks/" + id, { method: "DELETE" });
+    closeModal();
+    loadTasks();
+  }
+}
+
+document.getElementById("filterPriority").addEventListener("change", loadTasks);
+loadTasks();
+</script>
+</body>
+</html>
