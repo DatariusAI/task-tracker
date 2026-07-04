@@ -7,3 +7,10 @@ node_modules/
 .agents/
 .claude/
 skills-lock.json
+CLAUDE.md
+churn
+ml/
+src/
+index.js
+package.json
+package-lock.json
