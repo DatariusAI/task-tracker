@@ -1,4 +1,4 @@
-﻿# Final AI Review and Ownership Evidence
+# Final AI Review and Ownership Evidence
 
 ## AGENTS.md guardrails
 - Repo-specific stack and commands included: yes
@@ -26,7 +26,7 @@ I asked Claude to perform a read-only security review of the Task Tracker codeba
 | In-memory storage has no persistence or backup | app/storage.py | Noise | This is by design. The project explicitly uses in-memory dicts. A database is out of scope per project rules and AGENTS.md. | No action. Documented as intentional design choice. |
 
 ## Manual security check
-I manually checked the git history for leaked secrets by running git grep -l -i "sk-ant", git grep -l -i "api_key", git grep -l -i "password", and git log --all --diff-filter=A -- .env. All four commands returned empty results, confirming no secrets remain in the tracked files or commit history. I also verified that .gitignore includes .env, venv/, node_modules/, .agents/, and .claude/ to prevent future accidental commits. The .dockerignore excludes .env and .git to prevent secrets from being baked into container images.
+I manually checked the git history for leaked secrets by running git grep -l -i "[REDACTED-KEY-HINT] git grep -l -i "api_key", git grep -l -i "password", and git log --all --diff-filter=A -- .env. All four commands returned empty results, confirming no secrets remain in the tracked files or commit history. I also verified that .gitignore includes .env, venv/, node_modules/, .agents/, and .claude/ to prevent future accidental commits. The .dockerignore excludes .env and .git to prevent secrets from being baked into container images.
 
 ## One AI output I rejected or corrected
 During the mid-course project, AI generated a delete_task function in storage.py that only removed the task from _tasks without cleaning up associated comments in _comments. I caught this during line-by-line code review. If accepted as-is, orphaned comments would have accumulated in memory and the test_delete_task_removes_comments test would have failed. I manually added cleanup logic that iterates through _comments and removes entries matching the deleted task_id prefix. This demonstrates that AI output requires careful review for cross-cutting concerns like data cleanup that the model may not anticipate.
