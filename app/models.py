@@ -16,10 +16,10 @@ class TaskPriority(str, Enum):
 
 class TaskCreate(BaseModel):
     title: str = Field(..., min_length=1, max_length=200)
-    description: Optional[str] = None
+    description: Optional[str] = Field(None, max_length=2000)
     status: TaskStatus = TaskStatus.ToDo
     priority: TaskPriority = TaskPriority.Medium
-    assignee: Optional[str] = None
+    assignee: Optional[str] = Field(None, max_length=200)
     due_date: Optional[date] = None
 
     @field_validator("title")
@@ -30,11 +30,11 @@ class TaskCreate(BaseModel):
         return v.strip()
 
 class TaskUpdate(BaseModel):
-    title: Optional[str] = None
-    description: Optional[str] = None
+    title: Optional[str] = Field(None, max_length=200)
+    description: Optional[str] = Field(None, max_length=2000)
     status: Optional[TaskStatus] = None
     priority: Optional[TaskPriority] = None
-    assignee: Optional[str] = None
+    assignee: Optional[str] = Field(None, max_length=200)
     due_date: Optional[date] = None
 
     @field_validator("title")
@@ -55,7 +55,7 @@ class TaskResponse(BaseModel):
     due_date: Optional[date] = None
 
 class CommentCreate(BaseModel):
-    text: str = Field(..., min_length=1)
+    text: str = Field(..., min_length=1, max_length=2000)
 
     @field_validator("text")
     @classmethod
